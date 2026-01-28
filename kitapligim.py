@@ -1,37 +1,40 @@
 import streamlit as st
-import requests
-import pandas as pd
 from st_supabase_connection import SupabaseConnection
+import requests
 
-# --- SAYFA AYARLARI ---
-st.set_page_config(page_title="BookPulse Ultra", page_icon="📚", layout="wide")
+# Sayfa Ayarları
+st.set_page_config(page_title="Kişisel Kitaplığım", page_icon="📚", layout="wide")
 
-# --- BULUT BAĞLANTISI ---
+# CSS ile Şık Tasarım
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #4CAF50; color: white; }
+    .book-card { border: 1px solid #ddd; padding: 15px; border-radius: 10px; background: white; margin-bottom: 20px; text-align: center; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 1. BAĞLANTI: Supabase
 try:
     conn = st.connection("supabase", type=SupabaseConnection)
-except:
-    st.error("Veritabanı bağlantısı kurulamadı.")
+except Exception as e:
+    st.error(f"Veritabanı bağlantı hatası: {e}")
 
-# --- FONKSİYONLAR ---
-def get_books():
-    try:
-        res = conn.table("kitaplar").select("*").execute()
-        return pd.DataFrame(res.data)
-    except:
-        return pd.DataFrame()
-
-def add_to_library(bid, title, author, status, img):
-    data = {"id": bid, "title": title, "author": author, "date": "2026", "durum": status, "image_url": img}
-    conn.table("kitaplar").insert(data).execute()
-    st.toast(f"✅ {title} eklendi!")
-    st.rerun()
-
-# --- GOOGLE API DESTEKLİ ARAMA MOTORU ---
+# 2. FONKSİYON: Google Books Arama
 def master_search(q):
     results = []
+    # Secrets içinden anahtarı çekiyoruz
     try:
-        # Secrets'tan hem Google Key'i hem de Supabase bilgilerini güvenli çekiyoruz
-        google_key = st.secrets["api_keys"]["GOOGLE_BOOKS"]
+        # Önce [api_keys] altında arar, yoksa direkt kök dizinde arar
+        if "api_keys" in st.secrets:
+            google_key = st.secrets["api_keys"].get("GOOGLE_BOOKS")
+        else:
+            google_key = st.secrets.get("GOOGLE_BOOKS")
+            
+        if not google_key:
+            st.error("Hata: Google API Key (GOOGLE_BOOKS) Secrets içinde bulunamadı!")
+            return []
+
         query = q.replace(' ', '+')
         url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=10&key={google_key}"
         
@@ -41,43 +44,66 @@ def master_search(q):
             data = response.json()
             for item in data.get('items', []):
                 inf = item.get('volumeInfo', {})
-                # Resim URL'sini HTTPS yaparak güvenli hale getiriyoruz
-                img_url = inf.get('imageLinks', {}).get('thumbnail', "").replace("http://", "https://")
+                img_links = inf.get('imageLinks', {})
+                # Resim varsa çek, yoksa boş bırak
+                img_url = img_links.get('thumbnail', "").replace("http://", "https://")
+                
                 results.append({
                     "id": item.get('id'),
-                    "title": inf.get('title', 'Bilinmiyor'),
-                    "author": ", ".join(inf.get('authors', ['Bilinmiyor'])),
+                    "title": inf.get('title', 'Bilinmeyen Kitap'),
+                    "author": ", ".join(inf.get('authors', ['Bilinmeyen Yazar'])),
                     "img": img_url
                 })
+        elif response.status_code == 403:
+            st.error("Google API Hatası (403): Anahtarınızın Books API izni kapalı veya kısıtlı.")
         else:
-            st.error(f"Google Servis Hatası: {response.status_code}. Lütfen API Key'i kontrol edin.")
+            st.error(f"Google API Hatası: {response.status_code}")
     except Exception as e:
-        st.error(f"Bağlantı Hatası: {e}")
+        st.error(f"Arama sırasında hata oluştu: {e}")
     return results
 
-# --- ARAYÜZ ---
-st.title("📚 BookPulse Ultra")
+# ARAYÜZ
+st.title("📚 Kişisel Kitap Takip Sistemi")
 
-tab1, tab2 = st.tabs(["🔍 Kitap Ara & Ekle", "📋 Listem"])
+tab1, tab2 = st.tabs(["🔍 Yeni Kitap Ekle", "📖 Kütüphanem"])
 
+# TAB 1: ARAMA VE EKLEME
 with tab1:
-    col_input, col_btn = st.columns([4, 1])
-    search_query = col_input.text_input("Kitap veya Yazar Adı:", key="search_text", placeholder="Örn: Simyacı")
+    search_query = st.text_input("Kitap Adı veya Yazar Ara:", placeholder="Örn: Nutuk veya Sabahattin Ali")
     
-    if col_btn.button("🔍 Ara", use_container_width=True):
-        if search_query:
-            with st.spinner('Kitaplar aranıyor...'):
-                st.session_state['results'] = master_search(search_query)
+    if search_query:
+        books = master_search(search_query)
+        if books:
+            cols = st.columns(3)
+            for idx, book in enumerate(books):
+                with cols[idx % 3]:
+                    st.markdown(f'''
+                        <div class="book-card">
+                            <img src="{book['img']}" style="height:150px; margin-bottom:10px;"><br>
+                            <b>{book['title']}</b><br>
+                            <small>{book['author']}</small>
+                        </div>
+                    ''', unsafe_allow_html=True)
+                    
+                    if st.button(f"Kütüphaneye Ekle", key=f"btn_{book['id']}"):
+                        try:
+                            # Supabase'e ekleme işlemi
+                            conn.table("kitaplar").insert([
+                                {"kitap_id": book['id'], "kitap_adi": book['title'], "yazar": book['author'], "durum": "Okunacak"}
+                            ]).execute()
+                            st.success(f"'{book['title']}' başarıyla eklendi!")
+                        except Exception as e:
+                            st.error(f"Kayıt hatası: {e}")
+        else:
+            st.warning("Sonuç bulunamadı.")
 
-    if 'results' in st.session_state and st.session_state['results']:
-        for k in st.session_state['results']:
-            with st.container(border=True):
-                c1, c2 = st.columns([1, 5])
-                with c1:
-                    if k['img']: st.image(k['img'], width=80)
-                with c2:
-                    st.subheader(k['title'])
-                    st.write(f"✍️ {k['author']}")
-                    b1, b2, b3 = st.columns(3)
-                    if b1.button("⏳ Okuyacağım", key=f"w_{k['id']}"): add_to_library(k['id'], k['title'], k['author'], "Okuyacağım", k['img'])
-                    if b2.button("📖 Okuyorum", key=f"r_{k['id']}"): add_to_library
+# TAB 2: KÜTÜPHANEM LİSTESİ
+with tab2:
+    try:
+        res = conn.table("kitaplar").select("*").execute()
+        if res.data:
+            st.table(res.data)
+        else:
+            st.info("Kütüphaneniz henüz boş.")
+    except Exception as e:
+        st.error(f"Liste yüklenirken hata oluştu: {e}")

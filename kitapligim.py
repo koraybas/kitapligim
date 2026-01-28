@@ -4,7 +4,7 @@ import pandas as pd
 from st_supabase_connection import SupabaseConnection
 
 # --- SAYFA AYARLARI ---
-st.set_page_config(page_title="BookPulse Cloud", page_icon="📚", layout="wide")
+st.set_page_config(page_title="BookPulse Ultra", page_icon="📚", layout="wide")
 
 # --- BULUT BAĞLANTISI ---
 try:
@@ -26,27 +26,31 @@ def add_to_library(bid, title, author, status, img):
     st.toast(f"✅ {title} eklendi!")
     st.rerun()
 
-# --- GELİŞTİRİLMİŞ ARAMA MOTORU ---
+# --- GOOGLE API DESTEKLİ ARAMA MOTORU ---
 def master_search(q):
     results = []
     try:
-        # Boşlukları + ile değiştiriyoruz ve güvenli bağlantı kuruyoruz
+        # Secrets'tan hem Google Key'i hem de Supabase bilgilerini güvenli çekiyoruz
+        google_key = st.secrets["api_keys"]["GOOGLE_BOOKS"]
         query = q.replace(' ', '+')
-        url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=10"
+        url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=10&key={google_key}"
+        
         response = requests.get(url, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
             for item in data.get('items', []):
                 inf = item.get('volumeInfo', {})
+                # Resim URL'sini HTTPS yaparak güvenli hale getiriyoruz
+                img_url = inf.get('imageLinks', {}).get('thumbnail', "").replace("http://", "https://")
                 results.append({
                     "id": item.get('id'),
                     "title": inf.get('title', 'Bilinmiyor'),
                     "author": ", ".join(inf.get('authors', ['Bilinmiyor'])),
-                    "img": inf.get('imageLinks', {}).get('thumbnail', "").replace("http://", "https://")
+                    "img": img_url
                 })
         else:
-            st.error(f"Google Servis Hatası: {response.status_code}")
+            st.error(f"Google Servis Hatası: {response.status_code}. Lütfen API Key'i kontrol edin.")
     except Exception as e:
         st.error(f"Bağlantı Hatası: {e}")
     return results
@@ -57,17 +61,14 @@ st.title("📚 BookPulse Ultra")
 tab1, tab2 = st.tabs(["🔍 Kitap Ara & Ekle", "📋 Listem"])
 
 with tab1:
-    # Arama kutusu ve butonu yanyana
     col_input, col_btn = st.columns([4, 1])
     search_query = col_input.text_input("Kitap veya Yazar Adı:", key="search_text", placeholder="Örn: Simyacı")
     
-    if col_btn.button("🔍 Ara", use_container_width=True) or search_query:
+    if col_btn.button("🔍 Ara", use_container_width=True):
         if search_query:
             with st.spinner('Kitaplar aranıyor...'):
-                # Sonuçları session_state'e kaydediyoruz ki sayfa yenilendiğinde gitmesin
                 st.session_state['results'] = master_search(search_query)
 
-    # Sonuçları ekrana bas
     if 'results' in st.session_state and st.session_state['results']:
         for k in st.session_state['results']:
             with st.container(border=True):
@@ -79,12 +80,4 @@ with tab1:
                     st.write(f"✍️ {k['author']}")
                     b1, b2, b3 = st.columns(3)
                     if b1.button("⏳ Okuyacağım", key=f"w_{k['id']}"): add_to_library(k['id'], k['title'], k['author'], "Okuyacağım", k['img'])
-                    if b2.button("📖 Okuyorum", key=f"r_{k['id']}"): add_to_library(k['id'], k['title'], k['author'], "Okuyorum", k['img'])
-                    if b3.button("✅ Okudum", key=f"f_{k['id']}"): add_to_library(k['id'], k['title'], k['author'], "Okudum", k['img'])
-
-with tab2:
-    df = get_books()
-    if not df.empty:
-        st.dataframe(df[['title', 'author', 'durum']], use_container_width=True)
-    else:
-        st.info("Henüz kitap eklemediniz.")
+                    if b2.button("📖 Okuyorum", key=f"r_{k['id']}"): add_to_library

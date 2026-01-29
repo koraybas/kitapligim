@@ -2,100 +2,87 @@ import streamlit as st
 from st_supabase_connection import SupabaseConnection
 import requests
 
-# Sayfa Ayarları
-st.set_page_config(page_title="BookPulse | Kitap İzleyici", page_icon="📚", layout="centered")
+# 1. Page Configuration
+st.set_page_config(page_title="Kitap Yolculuğum", page_icon="📖", layout="wide")
 
-# Şık Tasarım Dokunuşları
+# 2. Custom Styling (CSS)
 st.markdown("""
     <style>
-    .stApp { background-color: #f8f9fa; }
-    .book-card { 
-        background: white; padding: 20px; border-radius: 15px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;
-        border-left: 5px solid #2e7d32;
-    }
-    .stButton>button { border-radius: 20px; font-weight: bold; }
+    .book-container { background-color: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 25px; }
+    .status-badge { padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 0.8em; color: white; }
     </style>
     """, unsafe_allow_html=True)
 
-# Veritabanı Bağlantısı
+# 3. Database Connection
 conn = st.connection("supabase", type=SupabaseConnection)
 
-# --- ARAMA MOTORU (API KEY GEREKTİRMEZ) ---
+# 4. Search Function (No API Key Required)
 def search_books(query):
-    # Google Books'un halka açık arama servisini kullanıyoruz (Key gerekmez)
-    url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=10&langRestrict=tr"
+    url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=8&langRestrict=tr"
     try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            data = response.json()
-            books = []
+        r = requests.get(url)
+        if r.status_code == 200:
+            data = r.json()
+            results = []
             for item in data.get('items', []):
-                vol = item.get('volumeInfo', {})
-                books.append({
+                v = item.get('volumeInfo', {})
+                results.append({
                     "id": item.get('id'),
-                    "baslik": vol.get('title', 'İsimsiz Kitap'),
-                    "yazar": ", ".join(vol.get('authors', ['Bilinmiyor'])),
-                    "ozet": vol.get('description', 'Özet bulunmuyor.'),
-                    "kapak": vol.get('imageLinks', {}).get('thumbnail', "").replace("http://", "https://")
+                    "title": v.get('title', 'Unknown'),
+                    "author": ", ".join(v.get('authors', ['Unknown'])),
+                    "desc": v.get('description', 'No summary available.'),
+                    "cover": v.get('imageLinks', {}).get('thumbnail', "").replace("http://", "https://")
                 })
-            return books
+            return results
     except:
         return []
 
-# --- ARAYÜZ ---
-st.title("🚀 BookPulse")
-st.caption("Türkiye'nin Dijital Kitap Kütüphanesi")
+# 5. User Interface
+st.title("📚 Kitap Yolculuğum")
+st.write("Türkiye'deki kitapları keşfet ve okuma listeni yönet.")
 
-tab1, tab2 = st.tabs(["🔍 Kitap Keşfet", "📖 Benim Kütüphanem"])
+tab1, tab2 = st.tabs(["🔍 Search & Discover", "🏠 My Library"])
 
-# TAB 1: ARAMA VE SEÇİM
 with tab1:
-    s_query = st.text_input("", placeholder="Kitap adı veya yazar yazın...")
-    
-    if s_query:
-        results = search_books(s_query)
-        for b in results:
+    search_input = st.text_input("Search for a book or author...", placeholder="e.g., Nutuk")
+    if search_input:
+        books = search_books(search_input)
+        for b in books:
             with st.container():
                 st.markdown(f"""
-                <div class="book-card">
-                    <img src="{b['kapak']}" style="float:left; width:80px; margin-right:15px; border-radius:5px;">
-                    <h4>{b['baslik']}</h4>
-                    <p><b>Yazar:</b> {b['yazar']}</p>
-                    <p style='font-size:0.9em; color:#555;'>{b['ozet'][:300]}...</p>
+                <div class="book-container">
+                    <img src="{b['cover']}" style="float:left; width:100px; margin-right:20px; border-radius:8px;">
+                    <h3>{b['title']}</h3>
+                    <p><b>Author:</b> {b['author']}</p>
+                    <p style="color:#666; font-size:0.9em;">{b['desc'][:400]}...</p>
                     <div style="clear:both;"></div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Seçenekler ve Ekleme Butonu
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    status = st.selectbox("Durum Seçin:", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"sel_{b['id']}")
-                with col2:
-                    if st.button("Kütüphaneme Ekle", key=f"btn_{b['id']}"):
-                        try:
-                            conn.table("kitaplar").insert([
-                                {"kitap_id": b['id'], "kitap_adi": b['baslik'], "yazar": b['yazar'], "durum": status}
-                            ]).execute()
-                            st.success("Listeye eklendi!")
-                        except:
-                            st.error("Veritabanı hatası! Tablonun hazır olduğundan emin olun.")
+                c1, c2 = st.columns([2,1])
+                with c1:
+                    status = st.selectbox("Status:", ["Will Read", "Reading", "Read"], key=f"s_{b['id']}")
+                with c2:
+                    if st.button("Add to Library", key=f"b_{b['id']}"):
+                        conn.table("kitaplar").insert([
+                            {"kitap_id": b['id'], "kitap_adi": b['title'], "yazar": b['author'], "durum": status}
+                        ]).execute()
+                        st.success("Added to your library!")
 
-# TAB 2: KÜTÜPHANEM
 with tab2:
+    st.subheader("Your Reading Journey")
     try:
-        my_books = conn.table("kitaplar").select("*").execute()
-        if my_books.data:
-            for kb in my_books.data:
-                col_a, col_b, col_c = st.columns([3, 2, 1])
-                col_a.write(f"**{kb['kitap_adi']}**")
-                col_b.write(f"_{kb['yazar']}_")
-                
-                # Duruma göre renkli etiket
-                color = "orange" if kb['durum'] == "Okuyorum" else "green" if kb['durum'] == "Okudum" else "blue"
-                col_c.markdown(f'<span style="color:{color}; font-weight:bold;">{kb["durum"]}</span>', unsafe_allow_html=True)
-                st.divider()
+        data = conn.table("kitaplar").select("*").execute()
+        if data.data:
+            for item in data.data:
+                color = "#3498db" if item['durum'] == "Will Read" else "#f1c40f" if item['durum'] == "Reading" else "#2ecc71"
+                st.markdown(f"""
+                <div style="padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+                    <div><b>{item['kitap_adi']}</b> - {item['yazar']}</div>
+                    <div class="status-badge" style="background-color:{color};">{item['durum']}</div>
+                </div>
+                """, unsafe_allow_html=True)
         else:
-            st.info("Kütüphanenizde henüz kitap yok.")
+            st.info("Your library is empty. Start adding some books!")
     except:
-        st.warning("Henüz hiç kitap eklenmemiş.")
+        st.warning("Database connection error. Please check your Supabase settings.")

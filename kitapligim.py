@@ -3,69 +3,99 @@ from st_supabase_connection import SupabaseConnection
 import requests
 
 # Sayfa Ayarları
-st.set_page_config(page_title="Kişisel Kitaplığım", page_icon="📚", layout="wide")
+st.set_page_config(page_title="BookPulse | Kitap İzleyici", page_icon="📚", layout="centered")
 
-# CSS Tasarımı
+# Şık Tasarım Dokunuşları
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; border-radius: 8px; background-color: #4CAF50; color: white; font-weight: bold; }
-    .book-card { border: 1px solid #eee; padding: 15px; border-radius: 12px; background: white; margin-bottom: 20px; text-align: center; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); }
-    img { border-radius: 5px; }
+    .stApp { background-color: #f8f9fa; }
+    .book-card { 
+        background: white; padding: 20px; border-radius: 15px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;
+        border-left: 5px solid #2e7d32;
+    }
+    .stButton>button { border-radius: 20px; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
 # Veritabanı Bağlantısı
-try:
-    conn = st.connection("supabase", type=SupabaseConnection)
-except Exception as e:
-    st.error("Veritabanına bağlanılamadı.")
+conn = st.connection("supabase", type=SupabaseConnection)
 
-# AKILLI ARAMA MOTORU (Google + Open Library Yedekli)
-def smart_search(q):
-    results = []
-    # Önce Google API Key kontrolü
-    google_key = st.secrets.get("GOOGLE_BOOKS") or st.secrets.get("api_keys", {}).get("GOOGLE_BOOKS")
-    
-    if google_key:
-        try:
-            url = f"https://www.googleapis.com/books/v1/volumes?q={q.replace(' ', '+')}&maxResults=10&key={google_key}"
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                for item in data.get('items', []):
-                    inf = item.get('volumeInfo', {})
-                    img = inf.get('imageLinks', {}).get('thumbnail', "").replace("http://", "https://")
-                    results.append({"id": item.get('id'), "title": inf.get('title'), "author": ", ".join(inf.get('authors', ['Bilinmiyor'])), "img": img})
-                if results: return results
-        except:
-            pass # Google hata verirse Open Library'ye geçecek
-
-    # YEDEK MOTOR: Open Library (API Key İstemez)
+# --- ARAMA MOTORU (API KEY GEREKTİRMEZ) ---
+def search_books(query):
+    # Google Books'un halka açık arama servisini kullanıyoruz (Key gerekmez)
+    url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=10&langRestrict=tr"
     try:
-        url = f"https://openlibrary.org/search.json?q={q.replace(' ', '+')}&limit=10"
-        response = requests.get(url, timeout=5).json()
-        for doc in response.get('docs', []):
-            img_id = doc.get('cover_i')
-            results.append({
-                "id": doc.get('key'),
-                "title": doc.get('title'),
-                "author": ", ".join(doc.get('author_name', ['Bilinmiyor'])),
-                "img": f"https://covers.openlibrary.org/b/id/{img_id}-M.jpg" if img_id else ""
-            })
-    except Exception as e:
-        st.error(f"Arama hatası: {e}")
-    return results
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            books = []
+            for item in data.get('items', []):
+                vol = item.get('volumeInfo', {})
+                books.append({
+                    "id": item.get('id'),
+                    "baslik": vol.get('title', 'İsimsiz Kitap'),
+                    "yazar": ", ".join(vol.get('authors', ['Bilinmiyor'])),
+                    "ozet": vol.get('description', 'Özet bulunmuyor.'),
+                    "kapak": vol.get('imageLinks', {}).get('thumbnail', "").replace("http://", "https://")
+                })
+            return books
+    except:
+        return []
 
-# ARAYÜZ
-st.title("📚 Kişisel Kitap Takip Sistemi")
-tab1, tab2 = st.tabs(["🔍 Yeni Kitap Ekle", "📖 Kütüphanem"])
+# --- ARAYÜZ ---
+st.title("🚀 BookPulse")
+st.caption("Türkiye'nin Dijital Kitap Kütüphanesi")
 
+tab1, tab2 = st.tabs(["🔍 Kitap Keşfet", "📖 Benim Kütüphanem"])
+
+# TAB 1: ARAMA VE SEÇİM
 with tab1:
-    search_query = st.text_input("Kitap veya Yazar Ara:", placeholder="Örn: Nutuk")
-    if search_query:
-        books = smart_search(search_query)
-        cols = st.columns(3)
-        for idx, book in enumerate(books):
-            with cols[idx % 3]:
-                st.markdown(f'<div class="book-card"><img src="{book["img"]}" height="180"><br><b>{book["title"]}</b><br><small>{book["author"]}</small></div>', unsafe_allow_html=True)
-                if st.button("Listeye Ekle",
+    s_query = st.text_input("", placeholder="Kitap adı veya yazar yazın...")
+    
+    if s_query:
+        results = search_books(s_query)
+        for b in results:
+            with st.container():
+                st.markdown(f"""
+                <div class="book-card">
+                    <img src="{b['kapak']}" style="float:left; width:80px; margin-right:15px; border-radius:5px;">
+                    <h4>{b['baslik']}</h4>
+                    <p><b>Yazar:</b> {b['yazar']}</p>
+                    <p style='font-size:0.9em; color:#555;'>{b['ozet'][:300]}...</p>
+                    <div style="clear:both;"></div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Seçenekler ve Ekleme Butonu
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    status = st.selectbox("Durum Seçin:", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"sel_{b['id']}")
+                with col2:
+                    if st.button("Kütüphaneme Ekle", key=f"btn_{b['id']}"):
+                        try:
+                            conn.table("kitaplar").insert([
+                                {"kitap_id": b['id'], "kitap_adi": b['baslik'], "yazar": b['yazar'], "durum": status}
+                            ]).execute()
+                            st.success("Listeye eklendi!")
+                        except:
+                            st.error("Veritabanı hatası! Tablonun hazır olduğundan emin olun.")
+
+# TAB 2: KÜTÜPHANEM
+with tab2:
+    try:
+        my_books = conn.table("kitaplar").select("*").execute()
+        if my_books.data:
+            for kb in my_books.data:
+                col_a, col_b, col_c = st.columns([3, 2, 1])
+                col_a.write(f"**{kb['kitap_adi']}**")
+                col_b.write(f"_{kb['yazar']}_")
+                
+                # Duruma göre renkli etiket
+                color = "orange" if kb['durum'] == "Okuyorum" else "green" if kb['durum'] == "Okudum" else "blue"
+                col_c.markdown(f'<span style="color:{color}; font-weight:bold;">{kb["durum"]}</span>', unsafe_allow_html=True)
+                st.divider()
+        else:
+            st.info("Kütüphanenizde henüz kitap yok.")
+    except:
+        st.warning("Henüz hiç kitap eklenmemiş.")

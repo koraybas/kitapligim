@@ -2,10 +2,8 @@ import streamlit as st
 from st_supabase_connection import SupabaseConnection
 import requests
 
-# 1. Page Configuration
 st.set_page_config(page_title="Kitap Yolculuğum", page_icon="📖", layout="wide")
 
-# 2. Custom Styling (CSS)
 st.markdown("""
     <style>
     .book-container { background-color: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 25px; }
@@ -13,82 +11,72 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. Database Connection
 conn = st.connection("supabase", type=SupabaseConnection)
 
-# 4. Search Function (Hata Korumalı Sürüm)
+# --- YENİ VE GARANTİ ARAMA MOTORU (Open Library) ---
 def search_books(query):
-    if not query:
-        return []
-    url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=8&langRestrict=tr"
+    if not query: return []
+    # Türkçe kitapları da kapsayan açık kütüphane araması
+    url = f"https://openlibrary.org/search.json?q={query.replace(' ', '+')}&limit=8"
     try:
         r = requests.get(url, timeout=10)
         if r.status_code == 200:
             data = r.json()
-            items = data.get('items', [])
             results = []
-            for item in items:
-                v = item.get('volumeInfo', {})
+            for doc in data.get('docs', []):
+                # Kapak resmi ID'si varsa oluştur, yoksa boş bırak
+                cover_id = doc.get('cover_i')
                 results.append({
-                    "id": item.get('id'),
-                    "title": v.get('title', 'Unknown Title'),
-                    "author": ", ".join(v.get('authors', ['Unknown Author'])),
-                    "desc": v.get('description', 'No summary available.'),
-                    "cover": v.get('imageLinks', {}).get('thumbnail', "").replace("http://", "https://")
+                    "id": doc.get('key'),
+                    "title": doc.get('title', 'Bilinmeyen Kitap'),
+                    "author": ", ".join(doc.get('author_name', ['Bilinmiyor'])),
+                    "desc": f"First published in {doc.get('first_publish_year', 'N/A')}. Subject: {', '.join(doc.get('subject', ['Literature'])[:3])}",
+                    "cover": f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else "https://via.placeholder.com/150x200?text=No+Cover"
                 })
             return results
-    except Exception as e:
+    except:
         return []
     return []
 
-# 5. User Interface
+# --- ARAYÜZ (DEĞİŞMEDİ) ---
 st.title("📚 Kitap Yolculuğum")
-
 tab1, tab2 = st.tabs(["🔍 Search & Discover", "🏠 My Library"])
 
 with tab1:
-    search_input = st.text_input("Search for a book or author...", key="search_box")
+    search_input = st.text_input("Kitap veya Yazar Ara...", key="search_box")
     if search_input:
         books = search_books(search_input)
-        if books: # HATA ENGELLEYİCİ: Eğer kitap varsa göster
+        if books:
             for b in books:
                 with st.container():
                     st.markdown(f"""
                     <div class="book-container">
                         <img src="{b['cover']}" style="float:left; width:100px; margin-right:20px; border-radius:8px;">
                         <h3>{b['title']}</h3>
-                        <p><b>Author:</b> {b['author']}</p>
-                        <p style="color:#666; font-size:0.9em;">{b['desc'][:400]}...</p>
+                        <p><b>Yazar:</b> {b['author']}</p>
+                        <p style="color:#666; font-size:0.9em;">{b['desc']}</p>
                         <div style="clear:both;"></div>
                     </div>
                     """, unsafe_allow_html=True)
-                    
                     c1, c2 = st.columns([2,1])
                     with c1:
-                        status = st.selectbox("Status:", ["Will Read", "Reading", "Read"], key=f"s_{b['id']}")
+                        status = st.selectbox("Durum:", ["Will Read", "Reading", "Read"], key=f"s_{b['id']}")
                     with c2:
                         if st.button("Add to Library", key=f"b_{b['id']}"):
-                            conn.table("kitaplar").insert([
-                                {"kitap_id": b['id'], "kitap_adi": b['title'], "yazar": b['author'], "durum": status}
-                            ]).execute()
-                            st.success(f"Added: {b['title']}")
+                            conn.table("kitaplar").insert([{"kitap_id": b['id'], "kitap_adi": b['title'], "yazar": b['author'], "durum": status}]).execute()
+                            st.success(f"Eklendi: {b['title']}")
         else:
-            st.info("No books found. Please try another search term.")
+            st.info("Henüz sonuç bulunamadı. Lütfen aramayı biraz detaylandırın.")
 
 with tab2:
-    st.subheader("Your Reading Journey")
+    st.subheader("Okuma Listem")
     try:
         data = conn.table("kitaplar").select("*").execute()
         if data.data:
             for item in data.data:
                 color = "#3498db" if item['durum'] == "Will Read" else "#f1c40f" if item['durum'] == "Reading" else "#2ecc71"
-                st.markdown(f"""
-                <div style="padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
-                    <div><b>{item['kitap_adi']}</b> - {item['yazar']}</div>
-                    <div class="status-badge" style="background-color:{color};">{item['durum']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f'<div style="padding:10px; border-bottom:1px solid #eee;"><b>{item["kitap_adi"]}</b> - {item["yazar"]} <span class="status-badge" style="background-color:{color}; float:right;">{item["durum"]}</span></div>', unsafe_allow_html=True)
         else:
-            st.info("Your library is empty.")
-    except Exception as e:
-        st.error("Database table error. Please make sure your 'kitaplar' table exists.")
+            st.info("Kütüphanen henüz boş.")
+    except:
+        st.error("Veritabanı tablosu 'kitaplar' bulunamadı.")

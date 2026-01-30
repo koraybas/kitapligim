@@ -3,147 +3,169 @@ from st_supabase_connection import SupabaseConnection
 import requests
 import pandas as pd
 
-# 1. Sayfa Ayarları
-st.set_page_config(page_title="Kitap Yolculuğum PRO", page_icon="📚", layout="wide")
+# 1. Sayfa Ayarları & Tema
+st.set_page_config(page_title="Kitap Yolculuğum Dashboard", page_icon="📖", layout="wide")
 
-# 2. Şık Görünüm (CSS)
+# 2. Gelişmiş Modern Arayüz Tasarımı (Görseldeki Stilde)
 st.markdown("""
     <style>
-    .book-card { background-color: #ffffff; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; border: 1px solid #eee; }
-    .status-badge { padding: 5px 12px; border-radius: 20px; font-weight: bold; font-size: 0.8em; color: white; }
-    .stButton>button { border-radius: 8px; font-weight: bold; }
+    /* Arka Plan */
+    .stApp {
+        background-color: #f0f2f6;
+    }
+    
+    /* Üst Başlık Paneli */
+    .main-header {
+        background: linear-gradient(90deg, #4b79a1 0%, #283e51 100%);
+        padding: 20px;
+        border-radius: 15px;
+        color: white;
+        text-align: center;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    /* Kart Tasarımları */
+    .metric-card {
+        background: white;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        text-align: center;
+    }
+    
+    .book-card {
+        background: white;
+        padding: 15px;
+        border-radius: 12px;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        transition: transform 0.2s;
+    }
+    
+    .book-card:hover {
+        transform: translateY(-3px);
+    }
+
+    /* Durum Etiketleri */
+    .status-pill {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8em;
+        font-weight: bold;
+        color: white;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- ÖZELLİK 1: BASİT GİRİŞ ŞİFRESİ ---
+# 3. Şifre Kontrolü
 def check_password():
     if "password_correct" not in st.session_state:
         st.session_state["password_correct"] = False
-    
-    if st.session_state["password_correct"]:
-        return True
+    if st.session_state["password_correct"]: return True
 
-    st.title("🔐 Özel Kütüphane Girişi")
-    password = st.text_input("Lütfen giriş şifrenizi yazınız:", type="password")
-    if st.button("Giriş Yap"):
-        if password == "1234": # Şifreni buradan değiştirebilirsin!
-            st.session_state["password_correct"] = True
-            st.rerun()
-        else:
-            st.error("❌ Yanlış şifre!")
+    st.markdown('<div class="main-header"><h1>📖 Kitap Yolculuğum</h1><p>Lütfen devam etmek için giriş yapın</p></div>', unsafe_allow_html=True)
+    with st.container():
+        c1, c2, c3 = st.columns([1,1,1])
+        with c2:
+            password = st.text_input("Şifre", type="password")
+            if st.button("Giriş Yap", use_container_width=True):
+                if password == "1234":
+                    st.session_state["password_correct"] = True
+                    st.rerun()
+                else: st.error("Hatalı şifre!")
     return False
 
 if check_password():
-    # 3. Veritabanı Bağlantısı
     conn = st.connection("supabase", type=SupabaseConnection)
 
-    # 4. Arama Motoru
-    def search_books(query):
-        if not query: return []
-        url = f"https://openlibrary.org/search.json?q={query.replace(' ', '+')}&limit=10"
-        try:
-            r = requests.get(url, timeout=10)
-            if r.status_code == 200:
-                data = r.json()
-                results = []
-                for doc in data.get('docs', []):
-                    cover_id = doc.get('cover_i')
-                    if 'title' in doc and 'author_name' in doc:
-                        results.append({
-                            "id": doc.get('key'),
-                            "title": doc.get('title'),
-                            "author": doc.get('author_name')[0],
-                            "year": doc.get('first_publish_year', 'N/A'),
-                            "cover": f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else None
-                        })
-                return results
-        except: return []
-        return []
+    # Üst Başlık
+    st.markdown('<div class="main-header"><h1>📖 Kitap Yolculuğum</h1></div>', unsafe_allow_html=True)
 
-    # 5. Ana Arayüz Tasarımı
-    st.title("📚 Kitap Yolculuğum")
-    tab1, tab2, tab3 = st.tabs(["🔍 Kitap Keşfet", "🏠 Kitaplığım", "📊 İstatistikler"])
+    tab1, tab2, tab3 = st.tabs(["🔍 Keşfet", "🏠 Kütüphanem", "📊 Analiz"])
 
     # --- TAB 1: KİTAP KEŞFET ---
     with tab1:
-        search_input = st.text_input("Yeni Kitap Ara...", placeholder="Örn: Nutuk, George Orwell...", key="main_search")
-        if search_input:
-            books = search_books(search_input)
-            if books:
-                for b in books:
+        search_q = st.text_input("Aramak istediğiniz kitap...", placeholder="🔍 Kitap, yazar veya konu...")
+        if search_q:
+            url = f"https://openlibrary.org/search.json?q={search_q.replace(' ', '+')}&limit=6"
+            try:
+                data = requests.get(url).json()
+                for doc in data.get('docs', []):
+                    cover_id = doc.get('cover_i')
+                    cover_url = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else "https://via.placeholder.com/100x150"
+                    
                     with st.container():
-                        c1, c2, c3 = st.columns([1, 2.5, 1.5])
-                        with c1:
-                            if b['cover']: st.image(b['cover'], use_container_width=True)
-                            else: st.info("Kapak Yok")
-                        with c2:
-                            st.subheader(b['title'])
-                            st.write(f"**Yazar:** {b['author']}")
-                            st.write(f"**Yıl:** {b['year']}")
-                        with c3:
+                        col_img, col_txt, col_btn = st.columns([1, 3, 1.5])
+                        with col_img:
+                            st.image(cover_url, width=100)
+                        with col_txt:
+                            st.subheader(doc.get('title'))
+                            st.write(f"**Yazar:** {doc.get('author_name', ['Bilinmiyor'])[0]}")
+                        with col_btn:
                             st.write("###")
-                            status = st.selectbox("Durum:", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"sel_{b['id']}")
-                            if st.button("➕ Ekle", key=f"btn_{b['id']}", type="primary", use_container_width=True):
-                                conn.table("kitaplar").insert([{"kitap_id": b['id'], "kitap_adi": b['title'], "yazar": b['author'], "durum": status}]).execute()
-                                st.success("Eklendi!")
-                                st.balloons()
+                            status = st.selectbox("Durum", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"s_{doc.get('key')}")
+                            if st.button("➕ Ekle", key=f"b_{doc.get('key')}", type="primary", use_container_width=True):
+                                conn.table("kitaplar").insert([{"kitap_id": doc.get('key'), "kitap_adi": doc.get('title'), "yazar": doc.get('author_name')[0], "durum": status}]).execute()
+                                st.toast(f"{doc.get('title')} eklendi!", icon="✅")
                     st.divider()
+            except: st.error("Arama sırasında bir hata oluştu.")
 
-    # --- TAB 2: KİTAPLIĞIM & ÖZELLİK 2: HIZLI ARAMA ---
+    # --- TAB 2: KÜTÜPHANEM (MODERN LİSTE) ---
     with tab2:
         try:
             res = conn.table("kitaplar").select("*").execute()
             my_books = res.data
             
             if my_books:
-                # Kendi kitapların içinde arama yapma
-                lib_search = st.text_input("📋 Kütüphanende Ara...", placeholder="Kitap veya yazar adı yazın...")
+                # Üst Metrikler (Görseldeki gibi)
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Toplam Kitap", len(my_books))
+                m2.metric("Okunan", len([b for b in my_books if b['durum'] == "Okudum"]))
+                m3.metric("Hedef", "50") # Manuel hedef
+
+                st.write("---")
+                search_lib = st.text_input("Kendi kitaplarımda ara...", placeholder="Kitap veya yazar adı...")
                 
-                filtered_books = [
-                    b for b in my_books 
-                    if lib_search.lower() in b['kitap_adi'].lower() or lib_search.lower() in b['yazar'].lower()
-                ]
+                for b in my_books:
+                    if search_lib.lower() in b['kitap_adi'].lower() or search_lib.lower() in b['yazar'].lower():
+                        renk = "#3498db" if b['durum'] == "Okuyacağım" else "#f1c40f" if b['durum'] == "Okuyorum" else "#2ecc71"
+                        
+                        with st.container():
+                            c_info, c_action = st.columns([4, 1])
+                            with c_info:
+                                st.markdown(f"""
+                                <div style="display: flex; align-items: center; background: white; padding: 15px; border-radius: 12px; border-left: 8px solid {renk};">
+                                    <div style="flex-grow: 1;">
+                                        <div style="font-weight: bold; font-size: 1.1em;">{b['kitap_adi']}</div>
+                                        <div style="color: #666;">{b['yazar']}</div>
+                                        <span class="status-pill" style="background-color: {renk};">{b['durum']}</span>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            with c_action:
+                                st.write("###")
+                                if st.button("🗑️ Sil", key=f"d_{b['id']}", use_container_width=True):
+                                    conn.table("kitaplar").delete().eq("id", b['id']).execute()
+                                    st.rerun()
+            else: st.info("Kütüphane boş.")
+        except: st.error("Veri yüklenemedi.")
 
-                st.divider()
-                for item in filtered_books:
-                    renk = "#3498db" if item['durum'] == "Okuyacağım" else "#f1c40f" if item['durum'] == "Okuyorum" else "#2ecc71"
-                    with st.container():
-                        ci, cd = st.columns([4, 1])
-                        with ci:
-                            st.markdown(f"""
-                            <div style="padding:10px; border-left: 5px solid {renk}; background-color: #fdfdfd; margin-bottom: 5px;">
-                                <b>{item['kitap_adi']}</b> - {item['yazar']}
-                                <br><span class="status-badge" style="background-color:{renk};">{item['durum']}</span>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        with cd:
-                            if st.button("🗑️ Sil", key=f"del_{item['id']}", use_container_width=True):
-                                conn.table("kitaplar").delete().eq("id", item['id']).execute()
-                                st.rerun()
-            else:
-                st.info("Kütüphanen henüz boş.")
-        except Exception as e:
-            st.error(f"Hata: {e}")
-
-    # --- TAB 3: ÖZELLİK 3: İSTATİSTİKLER ---
+    # --- TAB 3: ANALİZ (GÖRSELDEKİ GRAFİKLER) ---
     with tab3:
-        st.subheader("📊 Okuma Analizi")
         if my_books:
             df = pd.DataFrame(my_books)
+            c_left, c_right = st.columns(2)
             
-            col_stat1, col_stat2 = st.columns(2)
-            
-            with col_stat1:
-                st.write("**Okuma Durumları Dağılımı**")
+            with c_left:
+                st.markdown("### 📈 Okuma Durumu")
                 status_counts = df['durum'].value_counts()
-                st.bar_chart(status_counts)
+                st.bar_chart(status_counts, color="#4b79a1")
             
-            with col_stat2:
-                st.write("**En Çok Okunan Yazarlar**")
+            with c_right:
+                st.markdown("### ✍️ Favori Yazarlar")
                 author_counts = df['yazar'].value_counts().head(5)
                 st.write(author_counts)
-            
-            st.divider()
-            st.metric("Kütüphanedeki Toplam Kitap", len(my_books))
-        else:
-            st.info("İstatistik oluşturmak için henüz yeterli veri yok.")
+        else: st.info("Analiz için veri ekleyin.")

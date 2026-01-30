@@ -16,58 +16,64 @@ st.markdown("""
 # 3. Database Connection
 conn = st.connection("supabase", type=SupabaseConnection)
 
-# 4. Search Function (No API Key Required)
+# 4. Search Function (Hata Korumalı Sürüm)
 def search_books(query):
+    if not query:
+        return []
     url = f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=8&langRestrict=tr"
     try:
-        r = requests.get(url)
+        r = requests.get(url, timeout=10)
         if r.status_code == 200:
             data = r.json()
+            items = data.get('items', [])
             results = []
-            for item in data.get('items', []):
+            for item in items:
                 v = item.get('volumeInfo', {})
                 results.append({
                     "id": item.get('id'),
-                    "title": v.get('title', 'Unknown'),
-                    "author": ", ".join(v.get('authors', ['Unknown'])),
+                    "title": v.get('title', 'Unknown Title'),
+                    "author": ", ".join(v.get('authors', ['Unknown Author'])),
                     "desc": v.get('description', 'No summary available.'),
                     "cover": v.get('imageLinks', {}).get('thumbnail', "").replace("http://", "https://")
                 })
             return results
-    except:
+    except Exception as e:
         return []
+    return []
 
 # 5. User Interface
 st.title("📚 Kitap Yolculuğum")
-st.write("Türkiye'deki kitapları keşfet ve okuma listeni yönet.")
 
 tab1, tab2 = st.tabs(["🔍 Search & Discover", "🏠 My Library"])
 
 with tab1:
-    search_input = st.text_input("Search for a book or author...", placeholder="e.g., Nutuk")
+    search_input = st.text_input("Search for a book or author...", key="search_box")
     if search_input:
         books = search_books(search_input)
-        for b in books:
-            with st.container():
-                st.markdown(f"""
-                <div class="book-container">
-                    <img src="{b['cover']}" style="float:left; width:100px; margin-right:20px; border-radius:8px;">
-                    <h3>{b['title']}</h3>
-                    <p><b>Author:</b> {b['author']}</p>
-                    <p style="color:#666; font-size:0.9em;">{b['desc'][:400]}...</p>
-                    <div style="clear:both;"></div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                c1, c2 = st.columns([2,1])
-                with c1:
-                    status = st.selectbox("Status:", ["Will Read", "Reading", "Read"], key=f"s_{b['id']}")
-                with c2:
-                    if st.button("Add to Library", key=f"b_{b['id']}"):
-                        conn.table("kitaplar").insert([
-                            {"kitap_id": b['id'], "kitap_adi": b['title'], "yazar": b['author'], "durum": status}
-                        ]).execute()
-                        st.success("Added to your library!")
+        if books: # HATA ENGELLEYİCİ: Eğer kitap varsa göster
+            for b in books:
+                with st.container():
+                    st.markdown(f"""
+                    <div class="book-container">
+                        <img src="{b['cover']}" style="float:left; width:100px; margin-right:20px; border-radius:8px;">
+                        <h3>{b['title']}</h3>
+                        <p><b>Author:</b> {b['author']}</p>
+                        <p style="color:#666; font-size:0.9em;">{b['desc'][:400]}...</p>
+                        <div style="clear:both;"></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    c1, c2 = st.columns([2,1])
+                    with c1:
+                        status = st.selectbox("Status:", ["Will Read", "Reading", "Read"], key=f"s_{b['id']}")
+                    with c2:
+                        if st.button("Add to Library", key=f"b_{b['id']}"):
+                            conn.table("kitaplar").insert([
+                                {"kitap_id": b['id'], "kitap_adi": b['title'], "yazar": b['author'], "durum": status}
+                            ]).execute()
+                            st.success(f"Added: {b['title']}")
+        else:
+            st.info("No books found. Please try another search term.")
 
 with tab2:
     st.subheader("Your Reading Journey")
@@ -83,6 +89,6 @@ with tab2:
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("Your library is empty. Start adding some books!")
-    except:
-        st.warning("Database connection error. Please check your Supabase settings.")
+            st.info("Your library is empty.")
+    except Exception as e:
+        st.error("Database table error. Please make sure your 'kitaplar' table exists.")

@@ -3,26 +3,39 @@ from st_supabase_connection import SupabaseConnection
 import requests
 import pandas as pd
 
-# 1. Sayfa Konfigürasyonu
-st.set_page_config(page_title="Library Pro", page_icon="📑", layout="wide")
+# 1. Sayfa Ayarları
+st.set_page_config(page_title="Library Pro v2", page_icon="📈", layout="wide")
 
-# 2. Modern & Kompakt CSS
+# 2. Ultra Modern Tasarım (CSS)
 st.markdown("""
     <style>
-    .stApp { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); }
+    .stApp { background: #f4f7f6; }
     .hero-section {
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(12px);
+        background: white;
         padding: 20px;
         border-radius: 20px;
         text-align: center;
         margin-bottom: 20px;
-        border: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.02);
     }
-    .stButton>button { border-radius: 10px; font-weight: 600; }
-    /* Grafik alanlarını sınırlamak için */
-    [data-testid="stMetricValue"] { font-size: 24px !important; }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: bold; }
+    /* Analiz Kartları */
+    .stat-card {
+        background: white;
+        padding: 15px;
+        border-radius: 15px;
+        border: 1px solid #edf2f7;
+        text-align: center;
+    }
+    .author-tag {
+        display: inline-block;
+        background: #e2e8f0;
+        color: #4a5568;
+        padding: 5px 12px;
+        border-radius: 20px;
+        margin: 3px;
+        font-size: 13px;
+        font-weight: 500;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -30,92 +43,97 @@ st.markdown("""
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    st.markdown('<div class="hero-section"><h1>✨ Library Pro</h1></div>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1,2,1])
+    st.markdown('<div class="hero-section"><h1>🔐 Library Pro</h1></div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1,1.5,1])
     with c2:
-        with st.form("login"):
-            pwd = st.text_input("Şifre", type="password")
-            if st.form_submit_button("Giriş", use_container_width=True):
-                if pwd == "1234":
-                    st.session_state.logged_in = True
-                    st.rerun()
-                else: st.error("Hatalı!")
+        pwd = st.text_input("Giriş Kodu", type="password")
+        if st.button("Sistemi Aç", use_container_width=True):
+            if pwd == "1234":
+                st.session_state.logged_in = True
+                st.rerun()
+            else: st.error("Hatalı!")
 else:
     conn = st.connection("supabase", type=SupabaseConnection)
-    st.markdown('<div class="hero-section"><h1>✨ Library Pro</h1></div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-section"><h1>✨ Library Pro Dashboard</h1></div>', unsafe_allow_html=True)
 
-    tab1, tab2, tab3 = st.tabs(["🔍 Kitap Bul", "🏠 Koleksiyon", "📊 Analiz"])
+    tab1, tab2, tab3 = st.tabs(["🔍 Kitap Ekle", "🏠 Koleksiyon", "📈 Analiz & Özet"])
 
-    # --- TAB 1: KİTAP BUL ---
+    # --- TAB 1 & 2 Kısımları (Aynı Mantık, Görsel İyileştirmeli) ---
     with tab1:
-        q = st.text_input("", placeholder="Arayın...", key="search")
+        q = st.text_input("", placeholder="Kitap veya Yazar Ara...", key="search")
         if q:
-            data = requests.get(f"https://openlibrary.org/search.json?q={q.replace(' ', '+')}&limit=6").json()
+            data = requests.get(f"https://openlibrary.org/search.json?q={q.replace(' ', '+')}&limit=5").json()
             for doc in data.get('docs', []):
-                with st.container():
-                    c1, c2 = st.columns([1, 4])
-                    with c1: 
-                        cover_id = doc.get('cover_i')
-                        st.image(f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else "https://via.placeholder.com/80x120", width=80)
-                    with c2:
-                        st.write(f"**{doc.get('title')}**")
-                        st.caption(doc.get('author_name', ['-'])[0])
-                        ca, cb = st.columns([2, 1])
-                        status = ca.selectbox("Durum", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"s_{doc.get('key')}", label_visibility="collapsed")
-                        if cb.button("Ekle", key=f"a_{doc.get('key')}", use_container_width=True):
-                            conn.table("kitaplar").insert([{"kitap_id": doc.get('key'), "kitap_adi": doc.get('title'), "yazar": doc.get('author_name')[0], "durum": status}]).execute()
-                            st.toast("Eklendi!")
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    cid = doc.get('cover_i')
+                    st.image(f"https://covers.openlibrary.org/b/id/{cid}-M.jpg" if cid else "https://via.placeholder.com/80x120", width=80)
+                with col2:
+                    st.markdown(f"**{doc.get('title')}**")
+                    ca, cb = st.columns([2, 1])
+                    status = ca.selectbox("Durum", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"s_{doc.get('key')}", label_visibility="collapsed")
+                    if cb.button("Ekle", key=f"a_{doc.get('key')}", use_container_width=True):
+                        conn.table("kitaplar").insert([{"kitap_id": doc.get('key'), "kitap_adi": doc.get('title'), "yazar": doc.get('author_name')[0], "durum": status}]).execute()
+                        st.toast("Kütüphaneye eklendi!")
                 st.divider()
 
-    # --- TAB 2: KOLEKSİYON ---
     with tab2:
         res = conn.table("kitaplar").select("*").execute()
         my_books = res.data
         if my_books:
-            # Kompakt Metrikler
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Toplam", len(my_books))
-            c2.metric("Okunan", len([b for b in my_books if b['durum'] == "Okudum"]))
-            c3.metric("Devam", len([b for b in my_books if b['durum'] == "Okuyorum"]))
-            
-            st.write("---")
             for b in my_books:
-                with st.container():
-                    col_info, col_del = st.columns([5, 1.2])
-                    bg = "#E3F2FD" if b['durum'] == "Okuyacağım" else "#FFFDE7" if b['durum'] == "Okuyorum" else "#E8F5E9"
-                    tx = "#1565C0" if b['durum'] == "Okuyacağım" else "#F57F17" if b['durum'] == "Okuyorum" else "#2E7D32"
-                    col_info.markdown(f"""
-                        <div style="background:white; padding:10px; border-radius:10px; border:1px solid #eee;">
-                        <small>{b['yazar']}</small><br><b>{b['kitap_adi']}</b><br>
-                        <span class="badge" style="background:{bg}; color:{tx};">{b['durum']}</span>
-                        </div>""", unsafe_allow_html=True)
-                    if col_del.button("🗑️", key=f"d_{b['id']}", use_container_width=True):
-                        conn.table("kitaplar").delete().eq("id", b['id']).execute()
-                        st.rerun()
-        else: st.info("Boş.")
+                c_inf, c_d = st.columns([5, 1])
+                c_inf.markdown(f"**{b['kitap_adi']}** - <small>{b['yazar']}</small> ` {b['durum']} `", unsafe_allow_html=True)
+                if c_d.button("🗑️", key=f"d_{b['id']}", use_container_width=True):
+                    conn.table("kitaplar").delete().eq("id", b['id']).execute()
+                    st.rerun()
+        else: st.info("Henüz kitap yok.")
 
-    # --- TAB 3: ANALİZ (KÜÇÜLTÜLMÜŞ & YAN YANA) ---
+    # --- TAB 3: YENİ ANALİZ FORMATI (TAMAMEN DEĞİŞTİ) ---
     with tab3:
         if my_books:
             df = pd.DataFrame(my_books)
-            # Analizleri yan yana 3 sütuna böldük (Daha küçük görünmesi için)
-            a1, a2, a3 = st.columns([1.5, 1, 1])
             
-            with a1:
-                st.caption("📈 Okuma Dağılımı")
-                # Grafik boyutunu küçültmek için height ekledik
-                st.bar_chart(df['durum'].value_counts(), height=180)
+            # ÜST SIRA: ÖZET METRİKLER (KART SİSTEMİ)
+            st.markdown("### 🎯 Genel Bakış")
+            m1, m2, m3, m4 = st.columns(4)
+            total = len(df)
+            read = len(df[df['durum'] == "Okudum"])
+            reading = len(df[df['durum'] == "Okuyorum"])
             
-            with a2:
-                st.caption("✍️ Top 5 Yazar")
-                authors = df['yazar'].value_counts().head(5)
-                st.write(authors)
-            
-            with a3:
-                st.caption("🏆 Başarı")
-                total = len(my_books)
-                done = len([b for b in my_books if b['durum'] == "Okudum"])
-                perc = int((done/total)*100) if total > 0 else 0
-                st.metric("Tamamlama", f"%{perc}")
-                st.progress(perc / 100)
-        else: st.info("Veri yok.")
+            m1.metric("Koleksiyon", total)
+            m2.metric("Tamamlanan", read)
+            m3.metric("Şu an", reading)
+            score = int((read / total * 100) if total > 0 else 0)
+            m4.metric("Okur Skoru", f"%{score}")
+
+            st.write("---")
+
+            # ALT SIRA: YENİ GÖRSEL FORMAT
+            col_left, col_right = st.columns([1, 1])
+
+            with col_left:
+                st.markdown("#### 🥧 Okuma Dengesi")
+                # Alanı daraltılmış pasta grafiği benzeri bar
+                status_df = df['durum'].value_counts().reset_index()
+                st.write("Durumlara göre kitap ağırlığınız:")
+                st.dataframe(status_df.rename(columns={'count': 'Adet', 'durum': 'Durum'}), hide_index=True, use_container_width=True)
+                # İlerleme çubuğu ile görselleştirme
+                st.progress(score / 100, text=f"Kütüphane Tamamlama Oranı: %{score}")
+
+            with col_right:
+                st.markdown("#### 🏷️ En Çok Okunan Yazarlar")
+                authors = df['yazar'].value_counts().head(7)
+                # Yazarları liste yerine renkli "Tag/Etiket" formatında gösterelim
+                tag_html = ""
+                for author, count in authors.items():
+                    tag_html += f'<span class="author-tag">{author} ({count})</span>'
+                st.markdown(tag_html, unsafe_allow_html=True)
+                
+                st.write("##")
+                # Küçük bir motivasyon mesajı
+                if score > 50: st.success("🚀 Harika bir okuma temposu!")
+                elif score > 20: st.info("📚 Kütüphanen yavaş yavaş doluyor.")
+                else: st.warning("📖 Yeni bir maceraya başlamaya ne dersin?")
+        else:
+            st.info("Analiz için veri ekleyin.")

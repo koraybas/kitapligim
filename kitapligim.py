@@ -68,17 +68,23 @@ if not st.session_state.logged_in:
                     st.rerun()
                 else: st.error("❌ Hatalı Şifre!")
 else:
-    conn = st.connection("supabase", type=SupabaseConnection)
+    # Veritabanı bağlantısı
+    try:
+        conn = st.connection("supabase", type=SupabaseConnection)
+    except:
+        st.error("Veritabanı bağlantısı kurulamadı.")
+        st.stop()
+
     st.markdown('<div class="main-header"><h1>📚 KORAY BASARAN KÜTÜPHANE</h1></div>', unsafe_allow_html=True)
 
     tab1, tab2, tab3 = st.tabs(["🔍 Kitap Keşfet", "🏠 Koleksiyonum", "📊 Okuma Analizi"])
 
-    # --- TAB 1: KİTAP KEŞFET & AKILLI ÖZET ---
+    # --- TAB 1: KİTAP KEŞFET ---
     with tab1:
         st.markdown("<div class='dashboard-card'><h3>🔍 Yeni Kitaplar ve Özetler</h3>", unsafe_allow_html=True)
         q = st.text_input("", placeholder="Kitap veya yazar adı yazın...", key="search_k")
         if q:
-            with st.spinner('Kitaplar ve detaylar taranıyor...'):
+            with st.spinner('Kitaplar taranıyor...'):
                 try:
                     res = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=8").json()
                     for doc in res.get('docs', []):
@@ -94,21 +100,18 @@ else:
                             author = doc.get('author_name', ['Bilinmiyor'])[0]
                             st.write(f"✍️ **Yazar:** {author}")
                             
-                            # Gelişmiş Özet Butonu
                             if st.button("📖 Özeti Gör", key=f"sum_{doc.get('key')}"):
                                 try:
                                     work_id = doc.get('key')
                                     details = requests.get(f"https://openlibrary.org{work_id}.json", timeout=5).json()
                                     desc = details.get('description')
-                                    
-                                    if desc:
-                                        desc_text = desc.get('value') if isinstance(desc, dict) else desc
+                                    desc_text = desc.get('value') if isinstance(desc, dict) else desc
+                                    if desc_text:
                                         st.markdown(f"<div class='summary-text'>{desc_text[:800]}...</div>", unsafe_allow_html=True)
                                     else:
-                                        subjects = ", ".join(doc.get('subject', [])[:3])
-                                        st.info(f"Bu kitap için detaylı bir özet bulunamadı. \n\n**Kategoriler:** {subjects if subjects else 'Bilgi yok'}")
+                                        st.info("Bu kitap için özet bulunamadı.")
                                 except:
-                                    st.warning("Özet yüklenirken bir sorun oluştu.")
+                                    st.warning("Özet yüklenemedi.")
 
                         with col3:
                             st.write("##")
@@ -120,32 +123,62 @@ else:
                 except: st.error("Bağlantı hatası.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- TAB 2: KOLEKSİYONUM ---
+    # --- TAB 2: KOLEKSİYONUM (GÜNCELLEME ÖZELLİKLİ) ---
     with tab2:
         try:
             db_res = conn.table("kitaplar").select("*").execute()
             my_books = db_res.data
             if my_books:
                 st.markdown(f"<div class='dashboard-card'><h3>🏠 Koleksiyonunuz ({len(my_books)} Kitap)</h3>", unsafe_allow_html=True)
+                
+                # Durum seçenekleri listesi
+                status_options = ["Okuyacağım", "Okuyorum", "Okudum"]
+                
                 for b in my_books:
-                    c_inf, c_d = st.columns([5, 1])
+                    c_inf, c_status, c_del = st.columns([3, 2, 0.5])
+                    
                     with c_inf:
-                        st.markdown(f"**{b['kitap_adi']}** - <small>{b['yazar']}</small>  `{b['durum']}`", unsafe_allow_html=True)
-                    with c_d:
+                        st.markdown(f"**{b['kitap_adi']}**")
+                        st.caption(f"✍️ {b['yazar']}")
+                    
+                    with c_status:
+                        # Mevcut durumun indexini bulalım
+                        current_index = status_options.index(b['durum']) if b['durum'] in status_options else 0
+                        
+                        # Durum güncelleme kutusu
+                        new_status = st.selectbox(
+                            "Durum Güncelle", 
+                            status_options, 
+                            index=current_index, 
+                            key=f"upd_{b['id']}",
+                            label_visibility="collapsed"
+                        )
+                        
+                        # Eğer durum değiştiyse veritabanını güncelle
+                        if new_status != b['durum']:
+                            conn.table("kitaplar").update({"durum": new_status}).eq("id", b['id']).execute()
+                            st.toast(f"'{b['kitap_adi']}' güncellendi: {new_status}")
+                            # Analizlerin yenilenmesi için sayfayı hafifçe tetiklemek gerekebilir ama toast yeterli
+                    
+                    with c_del:
                         if st.button("🗑️", key=f"del_{b['id']}", use_container_width=True):
                             conn.table("kitaplar").delete().eq("id", b['id']).execute()
                             st.rerun()
+                    st.markdown('<hr style="margin:8px 0; border:0.1px solid #eee;">', unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
-            else: st.info("Henüz kitap eklemediniz.")
-        except: pass
+            else:
+                st.info("Henüz kitap eklemediniz.")
+        except Exception as e:
+            st.error(f"Koleksiyon yüklenirken hata oluştu: {e}")
 
     # --- TAB 3: ANALİZLER ---
     with tab3:
-        if my_books:
-            df = pd.DataFrame(my_books)
+        if 'my_books' in locals() and my_books:
+            # Güncel veriyi tekrar çekelim (değişiklikler yansısın)
+            df = pd.DataFrame(conn.table("kitaplar").select("*").execute().data)
             col_l, col_r = st.columns([1.5, 1])
             with col_l:
-                st.markdown("<div class='dashboard-card'><h3>📊 Dağılım</h3>", unsafe_allow_html=True)
+                st.markdown("<div class='dashboard-card'><h3>📊 Okuma Dağılımı</h3>", unsafe_allow_html=True)
                 counts = df['durum'].value_counts()
                 fig = go.Figure(data=[go.Pie(labels=counts.index, values=counts.values, hole=.6, marker=dict(colors=['#1a2a6c', '#2ecc71', '#f1c40f']))])
                 fig.update_layout(height=350, margin=dict(l=20,r=20,b=20,t=20))

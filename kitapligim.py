@@ -4,164 +4,118 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 
-# 1. Sayfa Ayarları
-st.set_page_config(page_title="KORAY BASARAN KÜTÜPHANE", page_icon="📚", layout="wide")
+# 1. Sayfa Konfigürasyonu
+st.set_page_config(page_title="Library Pro Max v4", page_icon="📚", layout="wide")
 
-# 2. Modern Dashboard CSS
+# 2. Modern Dashboard Tasarımı (CSS)
 st.markdown("""
     <style>
-    .stApp { background-color: #f0f2f6; }
-    .main-header {
-        background: linear-gradient(90deg, #1a2a6c 0%, #b21f1f 50%, #fdbb2d 100%);
-        padding: 25px;
-        border-radius: 15px;
-        color: white;
-        text-align: center;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
+    * { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .stApp { background-color: #f8fafc; }
+    .header-container {
+        background: #1e293b; padding: 25px; border-radius: 20px; color: white;
+        margin-bottom: 25px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
     }
-    .dashboard-card {
-        background: white;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
+    .stat-card {
+        background: white; border-radius: 18px; padding: 20px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 20px;
     }
-    .author-item {
-        display: flex;
-        align-items: center;
-        padding: 12px;
-        border-bottom: 1px solid #f0f0f0;
-        transition: background 0.3s;
-    }
-    .author-item:hover { background-color: #f8f9fa; }
-    .author-img {
-        width: 55px;
-        height: 80px;
-        object-fit: cover;
-        border-radius: 8px;
-        margin-right: 18px;
-        box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
-    }
-    .badge {
-        padding: 4px 10px;
-        border-radius: 10px;
-        font-size: 0.8em;
-        font-weight: bold;
+    .stButton>button {
+        border-radius: 10px; background: #3b82f6; color: white; border: none; font-weight: 600;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # 3. Giriş Sistemi
-if "logged_in" not in st.session_state: 
-    st.session_state.logged_in = False
+if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    st.markdown('<div class="main-header"><h1>📚 KORAY BASARAN KÜTÜPHANE</h1></div>', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1,1.5,1])
+    st.markdown('<div class="header-container"><h1>📚 KORAY BASARAN KÜTÜPHANE</h1></div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1,1,1])
     with c2:
-        with st.form("login_form"):
-            pwd = st.text_input("Giriş Şifresi", type="password")
-            if st.form_submit_button("Sisteme Bağlan", use_container_width=True):
-                if pwd == "1234":
-                    st.session_state.logged_in = True
-                    st.rerun()
-                else:
-                    st.error("❌ Hatalı Şifre!")
+        pwd = st.text_input("Şifre", type="password")
+        if st.button("Giriş", use_container_width=True):
+            if pwd == "1234":
+                st.session_state.logged_in = True
+                st.rerun()
 else:
-    # Veritabanı bağlantısı
     conn = st.connection("supabase", type=SupabaseConnection)
-    
-    st.markdown('<div class="main-header"><h1>📚 KORAY BASARAN KÜTÜPHANE</h1></div>', unsafe_allow_html=True)
+    st.markdown('<div class="header-container"><h1>📚 KORAY BASARAN KÜTÜPHANE</h1></div>', unsafe_allow_html=True)
 
-    tab1, tab2, tab3 = st.tabs(["🔍 Kitap Keşfet", "🏠 Koleksiyonum", "📊 Okuma Analizi"])
+    tab1, tab2, tab3 = st.tabs(["🔍 Kitap Keşfet (Google & Open)", "🏠 Kütüphanem", "📊 İstatistik"])
 
-    # --- TAB 1: KİTAP KEŞFET ---
+    # --- TAB 1: GOOGLE BOOKS DESTEKLİ GENİŞ ARAMA ---
     with tab1:
-        st.markdown("<div class='dashboard-card'><h3>🔍 Yeni Kitaplar Bul</h3>", unsafe_allow_html=True)
-        q = st.text_input("", placeholder="Kitap veya yazar adı yazın...", key="search_k")
+        st.markdown("<div class='stat-card'><h3>🔍 Geniş Kitap Araması</h3>", unsafe_allow_html=True)
+        q = st.text_input("", placeholder="D&R ve Amazon'da olan çoğu kitabı burada bulabilirsiniz...", key="search_q")
+        
         if q:
-            with st.spinner('Kütüphane taranıyor...'):
+            with st.spinner('Global kütüphaneler taranıyor...'):
+                # GOOGLE BOOKS API SORGUSU (Türkçe içerik için çok daha iyi)
                 try:
-                    res = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=10").json()
-                    for doc in res.get('docs', []):
-                        col1, col2, col3 = st.columns([1, 3, 1.5])
-                        cover_id = doc.get('cover_i')
-                        img = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else "https://via.placeholder.com/80x120?text=Kapak+Yok"
-                        
-                        with col1:
-                            st.image(img, width=90)
-                        with col2:
-                            st.markdown(f"#### {doc.get('title')}")
-                            author = doc.get('author_name', ['Bilinmiyor'])[0]
-                            st.write(f"✍️ **Yazar:** {author}")
-                        with col3:
-                            st.write("##")
-                            status = st.selectbox("Durum", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"s_{doc.get('key')}")
-                            if st.button("➕ Koleksiyona Ekle", key=f"add_{doc.get('key')}", use_container_width=True, type="primary"):
-                                conn.table("kitaplar").insert([{"kitap_id": doc.get('key'), "kitap_adi": doc.get('title'), "yazar": author, "durum": status}]).execute()
-                                st.toast(f"'{doc.get('title')}' eklendi!", icon="✅")
-                        st.divider()
-                except: st.error("Bağlantı hatası oluştu.")
+                    google_url = f"https://www.googleapis.com/books/v1/volumes?q={q.replace(' ', '+')}&maxResults=10&langRestrict=tr"
+                    res = requests.get(google_url).json()
+                    items = res.get('items', [])
+                    
+                    if items:
+                        for item in items:
+                            info = item.get('volumeInfo', {})
+                            with st.container():
+                                c1, c2, c3 = st.columns([1, 3, 1.5])
+                                with c1:
+                                    img = info.get('imageLinks', {}).get('thumbnail', "https://via.placeholder.com/100x150")
+                                    st.image(img, width=100)
+                                with c2:
+                                    st.markdown(f"#### {info.get('title')}")
+                                    author = info.get('authors', ['Bilinmiyor'])[0]
+                                    st.write(f"✍️ **Yazar:** {author}")
+                                    with st.expander("📖 Kitap Özetini Oku"):
+                                        st.write(info.get('description', 'Özet bulunamadı.'))
+                                with c3:
+                                    st.write("##")
+                                    status = st.selectbox("Durum", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"s_{item.get('id')}")
+                                    if st.button("➕ Koleksiyona Ekle", key=f"add_{item.get('id')}", use_container_width=True):
+                                        conn.table("kitaplar").insert([{"kitap_id": item.get('id'), "kitap_adi": info.get('title'), "yazar": author, "durum": status}]).execute()
+                                        st.toast("Koleksiyona eklendi!")
+                            st.divider()
+                    else:
+                        st.warning("Google Books üzerinde de bulunamadı. Lütfen yazımı kontrol edin.")
+                except:
+                    st.error("Arama sırasında bir hata oluştu.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- TAB 2: KOLEKSİYONUM ---
+    # --- TAB 2: KÜTÜPHANEM ---
     with tab2:
         try:
             db_res = conn.table("kitaplar").select("*").execute()
             my_books = db_res.data
             if my_books:
-                st.markdown(f"<div class='dashboard-card'><h3>🏠 Toplam {len(my_books)} Kitap</h3>", unsafe_allow_html=True)
                 for b in my_books:
-                    c_inf, c_d = st.columns([5, 1])
-                    with c_inf:
-                        st.markdown(f"**{b['kitap_adi']}** - <small>{b['yazar']}</small>  `{b['durum']}`", unsafe_allow_html=True)
-                    with c_d:
-                        if st.button("🗑️", key=f"del_{b['id']}", use_container_width=True):
-                            conn.table("kitaplar").delete().eq("id", b['id']).execute()
-                            st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
-            else:
-                st.info("Henüz kitap eklemediniz.")
+                    ci, cs, cd = st.columns([3, 1.5, 0.5])
+                    ci.markdown(f"**{b['kitap_adi']}**<br><small>{b['yazar']}</small>", unsafe_allow_html=True)
+                    opts = ["Okuyacağım", "Okuyorum", "Okudum"]
+                    new_s = cs.selectbox("Güncelle", opts, index=opts.index(b['durum']), key=f"up_{b['id']}", label_visibility="collapsed")
+                    if new_s != b['durum']:
+                        conn.table("kitaplar").update({"durum": new_s}).eq("id", b['id']).execute()
+                        st.rerun()
+                    if cd.button("🗑️", key=f"del_{b['id']}"):
+                        conn.table("kitaplar").delete().eq("id", b['id']).execute()
+                        st.rerun()
+                    st.markdown("<hr style='margin:10px 0; border:0.1px solid #eee;'>", unsafe_allow_html=True)
+            else: st.info("Koleksiyon boş.")
         except: pass
 
-    # --- TAB 3: ANALİZLER ---
+    # --- TAB 3: ANALİZ ---
     with tab3:
-        if my_books:
+        if 'my_books' in locals() and my_books:
             df = pd.DataFrame(my_books)
-            col_l, col_r = st.columns([2, 1.2])
-
-            with col_l:
-                st.markdown("<div class='dashboard-card'><h3>📊 Okuma Dağılımı</h3>", unsafe_allow_html=True)
-                counts = df['durum'].value_counts()
-                fig = go.Figure(data=[go.Pie(labels=counts.index, values=counts.values, hole=.6, 
-                                            marker=dict(colors=['#1a2a6c', '#2ecc71', '#f1c40f']))])
-                fig.update_layout(height=350, margin=dict(l=20,r=20,b=20,t=20))
+            c_l, c_r = st.columns([1.5, 1])
+            with c_l:
+                cnt = df['durum'].value_counts()
+                fig = go.Figure(data=[go.Pie(labels=cnt.index, values=cnt.values, hole=.5)])
                 st.plotly_chart(fig, use_container_width=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-
-            with col_r:
-                st.markdown("<div class='dashboard-card'><h3>✍️ En Çok Okunan Yazarlar</h3>", unsafe_allow_html=True)
-                top_authors = df['yazar'].value_counts().head(5)
-                
-                for author, count in top_authors.items():
-                    try:
-                        # Yazara ait ilk kitabın kapak ID'sini bul
-                        sample_book = df[df['yazar'] == author].iloc[0]['kitap_id']
-                        clean_id = sample_book.split('/')[-1]
-                        author_img = f"https://covers.openlibrary.org/b/olid/{clean_id}-M.jpg"
-                    except:
-                        author_img = "https://via.placeholder.com/55x80?text=Kitap"
-
-                    st.markdown(f"""
-                        <div class="author-item">
-                            <img src="{author_img}" class="author-img" onerror="this.src='https://via.placeholder.com/55x80?text=Yok'">
-                            <div>
-                                <div style="font-weight:bold; color:#2c3e50;">{author}</div>
-                                <div style="font-size:0.85em; color:#7f8c8d;">{count} Kitap</div>
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            st.info("Analizleri görmek için kitap eklemelisiniz.")
+            with c_r:
+                top = df['yazar'].value_counts().head(5)
+                for auth, count in top.items():
+                    st.write(f"👤 **{auth}**: {count} Kitap")

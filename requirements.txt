@@ -1,9 +1,5 @@
 streamlit
-
 st-supabase-connection
-
 pandas
-
 plotly
-
 requests

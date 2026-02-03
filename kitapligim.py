@@ -53,7 +53,7 @@ st.markdown("""
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    st.markdown('<div class="main-header"><h1>📚 Library Pro Max</h1></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>📚 KORAY BASARAN KÜTÜPHANE</h1></div>', unsafe_allow_html=True)
     with st.form("login"):
         pwd = st.text_input("Şifre", type="password")
         if st.form_submit_button("Giriş"):

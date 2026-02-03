@@ -8,7 +8,7 @@ import urllib.parse
 # 1. Sayfa Konfigürasyonu
 st.set_page_config(page_title="KORAY BASARAN KÜTÜPHANE", page_icon="📚", layout="wide")
 
-# 2. Modern Dashboard Tasarımı
+# 2. Modern Tasarım CSS
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
@@ -24,17 +24,19 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #edf2f7; margin-bottom: 15px;
     }
     .summary-box {
-        background: #f8fafc; border-left: 4px solid #3182ce; padding: 12px; border-radius: 8px; margin-top: 10px; font-size: 0.9rem; color: #2d3748;
+        background: #f1f5f9; border-left: 5px solid #3182ce; padding: 15px; 
+        border-radius: 10px; margin-top: 10px; font-size: 0.92rem; color: #1e293b;
+        max-height: 250px; overflow-y: auto; line-height: 1.6;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# İstatistikler için isim normalleştirme
+# Yazar isimlerini temizleme fonksiyonu
 def normalize_author_name(name):
     if not name: return "Bilinmiyor"
     name = name.strip().title()
-    translation_table = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
-    return name.translate(translation_table)
+    trans = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
+    return name.translate(trans)
 
 # 3. Giriş Sistemi
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
@@ -48,53 +50,47 @@ if not st.session_state.logged_in:
             if pwd == "1234":
                 st.session_state.logged_in = True
                 st.rerun()
-            else: st.error("Şifre Hatalı")
+            else: st.error("Hatalı Şifre!")
 else:
     conn = st.connection("supabase", type=SupabaseConnection)
-    st.markdown(f'''
-        <div class="header-container">
-            <h1>📚 KORAY BASARAN KÜTÜPHANE</h1>
-            <div style="background: #3182ce; padding: 8px 15px; border-radius: 10px; font-size: 0.8rem; font-weight: bold;">v10.1 ULTRA SEARCH</div>
-        </div>
-    ''', unsafe_allow_html=True)
+    st.markdown(f'''<div class="header-container"><h1>📚 KORAY BASARAN KÜTÜPHANE</h1>
+    <div style="background: #3182ce; padding: 8px 15px; border-radius: 10px; font-size: 0.8rem; font-weight: bold;">v10.3 FIXED</div></div>''', unsafe_allow_html=True)
 
     tab1, tab2, tab3 = st.tabs(["🔍 Kitap Keşfet", "🏠 Koleksiyonum", "📊 Analiz"])
 
     # --- TAB 1: GELİŞMİŞ HİBRİT KEŞFET ---
     with tab1:
         st.markdown("<div class='stat-card'><h3>🔍 Kapsamlı Kitap ve Yazar Arama</h3>", unsafe_allow_html=True)
-        q = st.text_input("", placeholder="Aramak istediğiniz kitap, yazar veya ISBN yazın...", key="ultra_search")
+        q = st.text_input("", placeholder="Kitap veya yazar adı...", key="ultra_search")
         
         if q:
-            with st.spinner('Global kütüphaneler taranıyor...'):
+            with st.spinner('Kütüphaneler taranıyor...'):
                 combined_results = []
-                search_query = urllib.parse.quote(q) # Türkçe karakter güvenliği için URL encode
+                search_query = urllib.parse.quote(q)
                 
-                # A: Google Books (Öncelikli Türkçe)
+                # A: Google Books
                 try:
-                    g_url = f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults=10"
-                    g_res = requests.get(g_url, timeout=7).json()
+                    g_res = requests.get(f"https://www.googleapis.com/books/v1/volumes?q={search_query}&maxResults=8", timeout=5).json()
                     if 'items' in g_res:
                         for item in g_res['items']:
                             info = item.get('volumeInfo', {})
                             combined_results.append({
-                                'id': f"g_{item.get('id')}",
+                                'source': 'google', 'id': item.get('id'),
                                 'title': info.get('title', 'Başlıksız'),
                                 'author': info.get('authors', ['Bilinmiyor'])[0],
                                 'cover': info.get('imageLinks', {}).get('thumbnail', ""),
-                                'desc': info.get('description', 'Açıklama mevcut değil.')
+                                'desc': info.get('description', 'Özet bilgisi mevcut değil.')
                             })
                 except: pass
 
-                # B: Open Library (Global Arşiv)
+                # B: Open Library
                 try:
-                    ol_url = f"https://openlibrary.org/search.json?q={search_query}&limit=10"
-                    ol_res = requests.get(ol_url, timeout=7).json()
+                    ol_res = requests.get(f"https://openlibrary.org/search.json?q={search_query}&limit=8", timeout=5).json()
                     if 'docs' in ol_res:
                         for doc in ol_res['docs']:
                             cid = doc.get('cover_i')
                             combined_results.append({
-                                'id': f"ol_{doc.get('key').split('/')[-1]}",
+                                'source': 'ol', 'id': doc.get('key').replace('/', '_'),
                                 'title': doc.get('title', 'Başlıksız'),
                                 'author': doc.get('author_name', ['Bilinmiyor'])[0],
                                 'cover': f"https://covers.openlibrary.org/b/id/{cid}-M.jpg" if cid else "",
@@ -103,32 +99,34 @@ else:
                 except: pass
 
                 if combined_results:
-                    # Aynı isimli kitapları filtrele (Opsiyonel: Gerekiyorsa eklenebilir)
-                    for book in combined_results:
+                    for b in combined_results:
                         with st.container():
-                            col1, col2, col3 = st.columns([1, 3, 1.5])
-                            with col1:
-                                st.image(book['cover'] if book['cover'] else "https://via.placeholder.com/100x150?text=Kapak+Yok", width=100)
-                            with col2:
-                                st.markdown(f"#### {book['title']}")
-                                st.write(f"✍️ **Yazar:** {book['author']}")
-                                if st.button("📖 Detaylı Bilgi / Özet", key=f"sum_{book['id']}"):
-                                    if book['id'].startswith("ol_"):
-                                        ol_id = book['desc']
-                                        det = requests.get(f"https://openlibrary.org{ol_id}.json").json()
-                                        d_raw = det.get('description', 'Özet bulunamadı.')
-                                        st.markdown(f"<div class='summary-box'>{d_raw.get('value') if isinstance(d_raw, dict) else d_raw}</div>", unsafe_allow_html=True)
+                            c1, c2, c3 = st.columns([1, 3, 1.5])
+                            with c1: st.image(b['cover'] if b['cover'] else "https://via.placeholder.com/100x150", width=100)
+                            with c2:
+                                st.markdown(f"#### {b['title']}")
+                                st.write(f"✍️ {b['author']}")
+                                if st.button("📖 Özet Bilgi", key=f"sum_{b['id']}"):
+                                    if b['source'] == 'ol':
+                                        try:
+                                            # JSONDecodeError'ı engellemek için kontrol ekledik
+                                            resp = requests.get(f"https://openlibrary.org{b['desc']}.json", timeout=5)
+                                            if resp.status_code == 200:
+                                                det = resp.json()
+                                                d_val = det.get('description', 'Özet bulunamadı.')
+                                                final_txt = d_val.get('value') if isinstance(d_val, dict) else d_val
+                                                st.markdown(f"<div class='summary-box'>{final_txt}</div>", unsafe_allow_html=True)
+                                            else: st.warning("Open Library detayı şu an veremiyor.")
+                                        except: st.warning("Özet yükleme hatası.")
                                     else:
-                                        st.markdown(f"<div class='summary-box'>{book['desc']}</div>", unsafe_allow_html=True)
-                            with col3:
+                                        st.markdown(f"<div class='summary-box'>{b['desc']}</div>", unsafe_allow_html=True)
+                            with c3:
                                 st.write("##")
-                                status = st.selectbox("Durum", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"s_{book['id']}")
-                                if st.button("➕ Ekle", key=f"add_{book['id']}", use_container_width=True, type="primary"):
-                                    conn.table("kitaplar").insert([{"kitap_id": book['id'], "kitap_adi": book['title'], "yazar": book['author'], "durum": status}]).execute()
-                                    st.toast(f"'{book['title']}' eklendi!", icon="✅")
+                                status = st.selectbox("Durum", ["Okuyacağım", "Okuyorum", "Okudum"], key=f"s_{b['id']}")
+                                if st.button("➕ Ekle", key=f"add_{b['id']}", use_container_width=True):
+                                    conn.table("kitaplar").insert([{"kitap_id": b['id'], "kitap_adi": b['title'], "yazar": b['author'], "durum": status}]).execute()
+                                    st.toast("Koleksiyona eklendi!")
                             st.divider()
-                else:
-                    st.warning("Maalesef sonuç bulunamadı. Lütfen aramayı basitleştirmeyi (sadece yazar soyadı veya sadece kitap adı) deneyin.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     # --- TAB 2: KOLEKSİYONUM ---
@@ -137,24 +135,21 @@ else:
             db_res = conn.table("kitaplar").select("*").execute()
             my_books = db_res.data
             if my_books:
-                st.markdown(f"<div class='stat-card'><h3>🏠 Koleksiyonunuz ({len(my_books)} Kitap)</h3>", unsafe_allow_html=True)
-                for b in my_books:
+                st.markdown(f"<div class='stat-card'><h3>🏠 Koleksiyonum ({len(my_books)} Kitap)</h3>", unsafe_allow_html=True)
+                for bk in my_books:
                     ci, cs, cd = st.columns([3, 1.5, 0.7])
-                    with ci: st.markdown(f"**{b['kitap_adi']}**<br><small>{b['yazar']}</small>", unsafe_allow_html=True)
-                    with cs:
-                        opts = ["Okuyacağım", "Okuyorum", "Okudum"]
-                        new_s = st.selectbox("Güncelle", opts, index=opts.index(b['durum']) if b['durum'] in opts else 0, key=f"up_{b['id']}", label_visibility="collapsed")
-                        if new_s != b['durum']:
-                            conn.table("kitaplar").update({"durum": new_s}).eq("id", b['id']).execute()
-                            st.rerun()
-                    with cd:
-                        if st.button("🗑️", key=f"del_{b['id']}", use_container_width=True):
-                            conn.table("kitaplar").delete().eq("id", b['id']).execute()
-                            st.rerun()
-                    st.markdown("<hr style='margin:5px 0; border:0.1px solid #edf2f7;'>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-            else: st.info("Kütüphaneniz şu an boş.")
-        except: st.error("Koleksiyon yüklenirken bir sorun oluştu.")
+                    ci.markdown(f"**{bk['kitap_adi']}**<br><small>{bk['yazar']}</small>", unsafe_allow_html=True)
+                    opts = ["Okuyacağım", "Okuyorum", "Okudum"]
+                    new_s = cs.selectbox("Durum", opts, index=opts.index(bk['durum']) if bk['durum'] in opts else 0, key=f"up_{bk['id']}", label_visibility="collapsed")
+                    if new_s != bk['durum']:
+                        conn.table("kitaplar").update({"durum": new_s}).eq("id", bk['id']).execute()
+                        st.rerun()
+                    if cd.button("🗑️", key=f"del_{bk['id']}", use_container_width=True):
+                        conn.table("kitaplar").delete().eq("id", bk['id']).execute()
+                        st.rerun()
+                    st.divider()
+            else: st.info("Koleksiyonunuz boş.")
+        except: pass
 
     # --- TAB 3: ANALİZ ---
     with tab3:
@@ -175,4 +170,4 @@ else:
                 for author, count in top_authors.items():
                     orig = df[df['clean_author'] == author]['yazar'].iloc[0]
                     st.write(f"👤 **{orig}**: {count} Kitap")
-        else: st.info("İstatistikleri görmek için kitap ekleyin.")
+        else: st.info("İstatistik için kitap ekleyin.")

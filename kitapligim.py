@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # 1. Sayfa Ayarları
-st.set_page_config(page_title="Library Pro Max Dashboard", page_icon="📚", layout="wide")
+st.set_page_config(page_title="KORAY BASARAN KÜTÜPHANE", page_icon="📚", layout="wide")
 
 # 2. Modern Dashboard CSS (Resimler ve Tasarım İçin)
 st.markdown("""

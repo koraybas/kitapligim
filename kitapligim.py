@@ -28,13 +28,14 @@ st.markdown("""
         margin-bottom: 20px;
     }
     .summary-text {
-        font-size: 0.9em;
-        color: #555;
-        background: #f9f9f9;
-        padding: 10px;
-        border-radius: 8px;
-        border-left: 4px solid #b21f1f;
+        font-size: 0.95em;
+        color: #444;
+        background: #fff9f9;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #b21f1f;
         margin: 10px 0;
+        line-height: 1.5;
     }
     .author-item {
         display: flex;
@@ -46,6 +47,7 @@ st.markdown("""
         width: 55px; height: 80px;
         object-fit: cover; border-radius: 8px;
         margin-right: 18px;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -71,12 +73,12 @@ else:
 
     tab1, tab2, tab3 = st.tabs(["🔍 Kitap Keşfet", "🏠 Koleksiyonum", "📊 Okuma Analizi"])
 
-    # --- TAB 1: KİTAP KEŞFET & ÖZET ---
+    # --- TAB 1: KİTAP KEŞFET & AKILLI ÖZET ---
     with tab1:
         st.markdown("<div class='dashboard-card'><h3>🔍 Yeni Kitaplar ve Özetler</h3>", unsafe_allow_html=True)
-        q = st.text_input("", placeholder="Kitap adı yazın...", key="search_k")
+        q = st.text_input("", placeholder="Kitap veya yazar adı yazın...", key="search_k")
         if q:
-            with st.spinner('Kitaplar ve detaylar getiriliyor...'):
+            with st.spinner('Kitaplar ve detaylar taranıyor...'):
                 try:
                     res = requests.get(f"https://openlibrary.org/search.json?q={q}&limit=8").json()
                     for doc in res.get('docs', []):
@@ -92,16 +94,21 @@ else:
                             author = doc.get('author_name', ['Bilinmiyor'])[0]
                             st.write(f"✍️ **Yazar:** {author}")
                             
-                            # Özet Getirme Butonu
+                            # Gelişmiş Özet Butonu
                             if st.button("📖 Özeti Gör", key=f"sum_{doc.get('key')}"):
                                 try:
                                     work_id = doc.get('key')
-                                    details = requests.get(f"https://openlibrary.org{work_id}.json").json()
-                                    desc = details.get('description', 'Bu kitap için bir özet bulunamadı.')
-                                    if isinstance(desc, dict): desc = desc.get('value')
-                                    st.markdown(f"<div class='summary-text'>{desc[:500]}...</div>", unsafe_allow_html=True)
+                                    details = requests.get(f"https://openlibrary.org{work_id}.json", timeout=5).json()
+                                    desc = details.get('description')
+                                    
+                                    if desc:
+                                        desc_text = desc.get('value') if isinstance(desc, dict) else desc
+                                        st.markdown(f"<div class='summary-text'>{desc_text[:800]}...</div>", unsafe_allow_html=True)
+                                    else:
+                                        subjects = ", ".join(doc.get('subject', [])[:3])
+                                        st.info(f"Bu kitap için detaylı bir özet bulunamadı. \n\n**Kategoriler:** {subjects if subjects else 'Bilgi yok'}")
                                 except:
-                                    st.warning("Özet yüklenemedi.")
+                                    st.warning("Özet yüklenirken bir sorun oluştu.")
 
                         with col3:
                             st.write("##")
@@ -119,7 +126,7 @@ else:
             db_res = conn.table("kitaplar").select("*").execute()
             my_books = db_res.data
             if my_books:
-                st.markdown(f"<div class='dashboard-card'><h3>🏠 Koleksiyonunuz ({len(my_books)})</h3>", unsafe_allow_html=True)
+                st.markdown(f"<div class='dashboard-card'><h3>🏠 Koleksiyonunuz ({len(my_books)} Kitap)</h3>", unsafe_allow_html=True)
                 for b in my_books:
                     c_inf, c_d = st.columns([5, 1])
                     with c_inf:
@@ -136,17 +143,34 @@ else:
     with tab3:
         if my_books:
             df = pd.DataFrame(my_books)
-            col_l, col_r = st.columns([2, 1.2])
+            col_l, col_r = st.columns([1.5, 1])
             with col_l:
                 st.markdown("<div class='dashboard-card'><h3>📊 Dağılım</h3>", unsafe_allow_html=True)
                 counts = df['durum'].value_counts()
-                fig = go.Figure(data=[go.Pie(labels=counts.index, values=counts.values, hole=.6)])
+                fig = go.Figure(data=[go.Pie(labels=counts.index, values=counts.values, hole=.6, marker=dict(colors=['#1a2a6c', '#2ecc71', '#f1c40f']))])
                 fig.update_layout(height=350, margin=dict(l=20,r=20,b=20,t=20))
                 st.plotly_chart(fig, use_container_width=True)
                 st.markdown("</div>", unsafe_allow_html=True)
             with col_r:
-                st.markdown("<div class='dashboard-card'><h3>✍️ En Çok Okunanlar</h3>", unsafe_allow_html=True)
+                st.markdown("<div class='dashboard-card'><h3>✍️ En Çok Okunan Yazarlar</h3>", unsafe_allow_html=True)
                 top_authors = df['yazar'].value_counts().head(5)
                 for author, count in top_authors.items():
-                    st.markdown(f"<div class='author-item'><b>{author}</b>: {count} Kitap</div>", unsafe_allow_html=True)
+                    try:
+                        sample_book = df[df['yazar'] == author].iloc[0]['kitap_id']
+                        clean_id = sample_book.split('/')[-1]
+                        author_img = f"https://covers.openlibrary.org/b/olid/{clean_id}-M.jpg"
+                    except:
+                        author_img = "https://via.placeholder.com/55x80?text=Kitap"
+                    
+                    st.markdown(f"""
+                        <div class="author-item">
+                            <img src="{author_img}" class="author-img" onerror="this.src='https://via.placeholder.com/55x80?text=Yok'">
+                            <div>
+                                <div style="font-weight:bold; color:#2c3e50;">{author}</div>
+                                <div style="font-size:0.85em; color:#7f8c8d;">{count} Kitap</div>
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info("Analizleri görmek için koleksiyonunuza kitap ekleyin.")

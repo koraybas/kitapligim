@@ -1,6 +1,9 @@
 streamlit
-pandas
+
 st-supabase-connection
-requests
+
 pandas
+
 plotly
+
+requests

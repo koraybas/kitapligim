@@ -63,7 +63,7 @@ if not st.session_state.logged_in:
             else: st.error("Hatalı!")
 else:
     conn = st.connection("supabase", type=SupabaseConnection)
-    st.markdown('<div class="main-header"><h1>📚 Library Pro Max Dashboard</h1></div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>📚 KORAY BASARAN KÜTÜPHANE</h1></div>', unsafe_allow_html=True)
 
     tab1, tab2, tab3 = st.tabs(["🔍 Keşfet", "🏠 Koleksiyon", "📊 Analizler"])
 
